@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
+import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { ShieldCheck, Terminal, Send, Sparkles, RotateCcw, LogOut, Mail, KeyRound, UserPlus } from 'lucide-react';
 import {
@@ -95,7 +96,10 @@ function MessageContent({ text }: { text: string }) {
 }
 
 // ─── Custom Tooltip ────────────────────────────────────────────────────────────
-function CustomTooltip({ active, payload, label }: any) {
+interface TooltipEntry { dataKey: string; value: number; color: string; }
+interface CustomTooltipProps { active?: boolean; payload?: TooltipEntry[]; label?: string | number; }
+
+function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
   if (!active || !payload?.length) return null;
   return (
     <div style={{
@@ -108,7 +112,7 @@ function CustomTooltip({ active, payload, label }: any) {
       minWidth: 148,
     }}>
       <div style={{ color: 'rgba(255,255,255,0.35)', letterSpacing: '0.1em', marginBottom: 6 }}>{label}</div>
-      {payload.map((p: any) => (
+      {payload.map((p) => (
         <div key={p.dataKey} style={{ display: 'flex', justifyContent: 'space-between', gap: 16, marginBottom: 3 }}>
           <span style={{ color: p.color, letterSpacing: '0.08em' }}>{p.dataKey}</span>
           <span style={{ color: '#f0f4f8', fontWeight: 500 }}>{p.value.toFixed(1)}%</span>
@@ -167,7 +171,7 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!isAuthenticated) return;
 
-    let telemetrySubscription: any;
+    let telemetrySubscription: RealtimeChannel | undefined;
 
     async function initializeSecurePipeline() {
       setStatus('Fetching secure data matrix profile...');
@@ -257,9 +261,14 @@ export default function DashboardPage() {
     setIsAnalyzing(true);
 
     try {
+      // Attach the current session JWT so the copilot can scope telemetry to this user
+      const { data: { session } } = await supabase.auth.getSession();
       const response = await fetch('http://127.0.0.1:8000/api/copilot/analyze', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
         body: JSON.stringify({ message: userPrompt }),
       });
 
@@ -448,7 +457,7 @@ export default function DashboardPage() {
             {[
               { label: 'DISK VOLUME C:',  value: `${disk.toFixed(1)}%`, bar: disk,                          sub: 'primary partition saturation', accent: '#fbbf24', icon: '▤' },
               { label: 'BATTERY CELL',    value: `${batteryPct.toFixed(0)}%`, bar: batteryPct,              sub: batteryCharging ? '⚡ charging — ac connected' : 'discharging on battery', accent: batteryCharging ? '#4ade80' : '#facc15', icon: '⊟' },
-              { label: 'GPU POWER DRAW',  value: `${gpuPower.toFixed(1)}W`, bar: Math.min((gpuPower / 115) * 100, 100), sub: `core clock ${gpuClock.toFixed(0)} mhz`, accent: '#22d3ee', icon: '⌁' },
+              { label: 'GPU POWER DRAW',  value: `${gpuPower.toFixed(1)}W`, bar: Math.min((gpuPower / 115) * 100, 100), sub: `clock ${gpuClock.toFixed(0)}mhz · fan ${gpuFan.toFixed(0)}%`, accent: '#22d3ee', icon: '⌁' },
             ].map(({ label, value, bar, sub, accent, icon }) => (
               <div key={label} className="relative overflow-hidden" style={{ background: 'rgba(10,18,28,.9)', border: '1px solid rgba(255,255,255,.07)', borderRadius: 6, padding: '20px 18px 16px' }}>
                 <div className="absolute top-0 left-0 right-0 h-0.5" style={{ background: `linear-gradient(90deg, ${accent}, transparent)` }} />

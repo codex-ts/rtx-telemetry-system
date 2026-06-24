@@ -58,6 +58,7 @@ def start_hardware_daemon(user_id: str):
     # Establish a network counter baseline so we can derive throughput rates between cycles
     prev_net = psutil.net_io_counters()
     prev_time = time.time()
+    first_sample = True  # first loop has a near-zero interval; don't emit a bogus rate spike
 
     while True:
         try:
@@ -101,8 +102,15 @@ def start_hardware_daemon(user_id: str):
             now = time.time()
             curr_net = psutil.net_io_counters()
             elapsed = max(now - prev_time, 0.001)
-            net_up = (curr_net.bytes_sent - prev_net.bytes_sent) / elapsed / 1024.0    # KB/s
-            net_down = (curr_net.bytes_recv - prev_net.bytes_recv) / elapsed / 1024.0  # KB/s
+            # Clamp deltas to >= 0 so a counter reset / NIC reset / wrap can't emit negative rates
+            up_delta = max(curr_net.bytes_sent - prev_net.bytes_sent, 0)
+            down_delta = max(curr_net.bytes_recv - prev_net.bytes_recv, 0)
+            if first_sample:
+                net_up = net_down = 0.0
+                first_sample = False
+            else:
+                net_up = up_delta / elapsed / 1024.0      # KB/s
+                net_down = down_delta / elapsed / 1024.0  # KB/s
             prev_net, prev_time = curr_net, now
 
             battery_pct = 0.0
